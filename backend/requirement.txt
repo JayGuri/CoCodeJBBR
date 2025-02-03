@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+langchain
+pdfplumber
+sentence-transformers
+scikit-learn
+nltk
