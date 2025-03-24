@@ -84,8 +84,8 @@ class SentenceTransformerEmbeddings(Embeddings):
 # Initialize components
 embeddings = SentenceTransformerEmbeddings()
 vector_store = InMemoryVectorStore(embeddings)
-flashcard_model = OllamaLLM(model="qwen2.5:3b", temperature=0.7)
-chat_model = OllamaLLM(model="qwen2.5:3b", temperature=0.7)
+flashcard_model = OllamaLLM(model="qwen2.5:7b", temperature=0.7)
+chat_model = OllamaLLM(model="qwen2.5:7b", temperature=0.7)
 sentiment_analyzer = SentimentIntensityAnalyzer()
 
 # Templates for flashcards
