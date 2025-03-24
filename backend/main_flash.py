@@ -17,28 +17,42 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama.llms import OllamaLLM
 from sentence_transformers import SentenceTransformer
 from langchain_core.embeddings import Embeddings
-from sklearn.feature_extraction.text import TfidfVectorizer
-from nltk.tokenize import sent_tokenize
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 import nltk
 import numpy as np
 
-# Set NLTK data path before downloads
+# Set NLTK data path
 nltk.data.path.append("C:\\Users\\Jay Manish Guri\\AppData\\Roaming\\nltk_data")
 nltk.download('punkt')
 nltk.download('stopwords')
 
-app = FastAPI(title="Flashcard Generator API")
+app = FastAPI(title="PDF Assistant: Flashcard and Q&A System")
 
+# CORS Configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-flashcard_sessions = {}
+# Configuration
+UPLOAD_FOLDER = Path("pdf_uploads")
+UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 
+# Model and Embeddings
+class SentenceTransformerEmbeddings(Embeddings):
+    def _init_(self, model_name="all-MiniLM-L6-v2"):
+        self.model = SentenceTransformer(model_name)
+    
+    def embed_documents(self, texts):
+        return self.model.encode(texts).tolist()
+    
+    def embed_query(self, text):
+        return self.model.encode([text])[0].tolist()
+
+# Pydantic Models
 class FlashCard(BaseModel):
     topic: str
     question: str
@@ -48,20 +62,57 @@ class FlashCardSessionResponse(BaseModel):
     session_id: str
     flashcard: Optional[FlashCard]
 
-class SentenceTransformerEmbeddings(Embeddings):
-    def __init__(self, model_name="all-MiniLM-L6-v2"):
-        self.model = SentenceTransformer(model_name)
-    
-    def embed_documents(self, texts):
-        return self.model.encode(texts).tolist()
-    
-    def embed_query(self, text):
-        return self.model.encode([text])[0].tolist()
+class QuestionRequest(BaseModel):
+    question: str
+    previous_conversations: List[str] = []
+    chat_history: List[str] = []
 
+class QuestionResponse(BaseModel):
+    answer: str
+    sentiment: str
+
+# Global Variables
 embeddings = SentenceTransformerEmbeddings()
 vector_store = InMemoryVectorStore(embeddings)
 model = OllamaLLM(model="qwen2.5:7b", temperature=0.7)
+sentiment_analyzer = SentimentIntensityAnalyzer()
 
+flashcard_sessions = {}
+
+# Templates
+TEMPLATES = {
+    'neutral': """
+    You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. 
+    If the user asks you for a summary or explanation of a particular topic, find that topic and summarize or explain it before giving the answer.
+    Previous Conversations (User-Assistant Q&A): {previous_conversations}
+    Chat History (User-Assistant Dialogue): {chat_history}
+    Question: {question} 
+    Context: {context} 
+    Answer in a neutral and straightforward manner:
+    """,
+    
+    'positive': """
+    You are an enthusiastic and encouraging assistant. Use the following pieces of retrieved context to answer the question. 
+    If the user asks you for a summary or explanation of a particular topic, find that topic and summarize or explain it before giving the answer.
+    Previous Conversations (User-Assistant Q&A): {previous_conversations}
+    Chat History (User-Assistant Dialogue): {chat_history}
+    Question: {question} 
+    Context: {context} 
+    Answer in an upbeat and positive tone:
+    """,
+    
+    'negative': """
+    You are an empathetic and supportive assistant. Use the following pieces of retrieved context to answer the question. 
+    If the user asks you for a summary or explanation of a particular topic, find that topic and summarize or explain it before giving the answer.
+    Previous Conversations (User-Assistant Q&A): {previous_conversations}
+    Chat History (User-Assistant Dialogue): {chat_history}
+    Question: {question} 
+    Context: {context} 
+    Answer in a supportive and understanding tone:
+    """
+}
+
+# Flashcard Generation Templates
 topic_specific_template = """
 Create a flashcard about {specific_topic} from the following text. Focus specifically on this topic.
 
@@ -82,9 +133,7 @@ Q: [Question that tests understanding]
 A: [Clear, concise answer]
 """
 
-UPLOAD_FOLDER = "uploaded_pdfs"
-Path(UPLOAD_FOLDER).mkdir(parents=True, exist_ok=True)
-
+# Utility Functions
 def chunks(text, chunk_size=1000, overlap=200):
     """Split text into overlapping chunks."""
     words = text.split()
@@ -94,15 +143,46 @@ def chunks(text, chunk_size=1000, overlap=200):
         chunks.append(chunk)
     return chunks
 
-async def process_pdf(file_path: str):
+def get_sentiment(text: str) -> str:
+    scores = sentiment_analyzer.polarity_scores(text)
+    compound_score = scores['compound']
+    
+    if compound_score >= 0.05:
+        return 'positive'
+    elif compound_score <= -0.05:
+        return 'negative'
+    else:
+        return 'neutral'
+
+def parse_flashcard_response(response: str, topic: str = "General") -> Optional[FlashCard]:
+    """Parse LLM response into a structured flashcard."""
+    lines = response.split('\n')
+    question, answer = "", ""
+    
+    for line in lines:
+        if line.startswith('Q:'):
+            question = line[2:].strip()
+        elif line.startswith('A:'):
+            answer = line[2:].strip()
+    
+    return FlashCard(topic=topic, question=question, answer=answer) if question and answer else None
+
+async def process_pdf(file_path: Path):
     try:
-        loader = PDFPlumberLoader(file_path)
+        loader = PDFPlumberLoader(str(file_path))
         documents = loader.load()
-        if not documents:
-            raise HTTPException(400, "No text extracted from PDF.")
+        
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200,
+            add_start_index=True
+        )
+        
+        chunks = text_splitter.split_documents(documents)
+        vector_store.add_documents(chunks)
         return documents
     except Exception as e:
-        raise HTTPException(400, f"Error processing PDF: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
 
 async def generate_flashcards(documents, num_cards: int, specific_topic: Optional[str] = None):
     """Generate flashcards with optional topic focus."""
@@ -141,21 +221,36 @@ async def generate_flashcards(documents, num_cards: int, specific_topic: Optiona
     
     return flashcards[:num_cards]
 
-def parse_flashcard_response(response: str, topic: str = "General") -> Optional[FlashCard]:
-    """Parse LLM response into a structured flashcard."""
-    lines = response.split('\n')
-    question, answer = "", ""
-    
-    for line in lines:
-        if line.startswith('Q:'):
-            question = line[2:].strip()
-        elif line.startswith('A:'):
-            answer = line[2:].strip()
-    
-    return FlashCard(topic=topic, question=question, answer=answer) if question and answer else None
+def answer_question(question: str, previous_conversations: List[str], chat_history: List[str]) -> tuple[str, str]:
+    try:
+        sentiment = get_sentiment(question)
+        template = TEMPLATES[sentiment]
+        
+        # Retrieve relevant documents
+        documents = vector_store.similarity_search(question)
+        context = "\n\n".join([doc.page_content for doc in documents])
+        
+        # Format conversation history
+        conversation_history = "\n".join(previous_conversations)
+        chat_history_str = "\n".join(chat_history)
+        
+        # Generate response
+        prompt = ChatPromptTemplate.from_template(template)
+        chain = prompt | model
+        response = chain.invoke({
+            "question": question,
+            "previous_conversations": conversation_history,
+            "chat_history": chat_history_str,
+            "context": context
+        })
+        
+        return response, sentiment
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating answer: {str(e)}")
 
+# API Endpoints
 @app.post("/upload", response_model=FlashCardSessionResponse)
-async def upload_pdf(
+async def upload_pdf_for_flashcards(
     file: UploadFile = File(...),
     num_cards: int = Form(...),
     specific_topic: Optional[str] = Form(None)
@@ -166,8 +261,8 @@ async def upload_pdf(
     if not 1 <= num_cards <= 20:
         raise HTTPException(400, "Number of cards must be between 1 and 20")
     
-    file_path = os.path.join(UPLOAD_FOLDER, f"{uuid4()}.pdf")
-    with open(file_path, "wb") as f:
+    file_path = UPLOAD_FOLDER / f"{uuid4()}.pdf"
+    with file_path.open("wb") as f:
         shutil.copyfileobj(file.file, f)
     
     try:
@@ -186,8 +281,8 @@ async def upload_pdf(
         )
     finally:
         # Clean up the uploaded file
-        if os.path.exists(file_path):
-            os.remove(file_path)
+        if file_path.exists():
+            file_path.unlink()
 
 @app.post("/next-flashcard", response_model=FlashCardSessionResponse)
 async def get_next_flashcard(request_data: dict):
@@ -203,5 +298,23 @@ async def get_next_flashcard(request_data: dict):
         flashcard=flashcard_sessions[session_id].pop(0)
     )
 
+@app.post("/ask/", response_model=QuestionResponse)
+async def ask_question(request: QuestionRequest):
+    if not vector_store.docstore._dict:  # Check if any documents have been processed
+        raise HTTPException(status_code=400, detail="No documents have been processed. Please upload a PDF first.")
+    
+    answer, sentiment = answer_question(
+        request.question,
+        request.previous_conversations,
+        request.chat_history
+    )
+    
+    return QuestionResponse(answer=answer, sentiment=sentiment)
+
+@app.get("/health/")
+async def health_check():
+    return {"status": "healthy"}
+
+# Run the application
 if __name__ == "__main__":
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
