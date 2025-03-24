@@ -14,6 +14,18 @@ export interface NextFlashcardResponse {
   flashcard: Flashcard | null
 }
 
+export interface ChatQuestion {
+  question: string
+  previous_conversations?: string[]
+  chat_history?: string[]
+}
+
+export interface ChatResponse {
+  answer: string
+  sentiment: string
+}
+
+// Flashcard API functions
 export const uploadPDF = async (file: File, numCards: number, specificTopic?: string): Promise<UploadResponse> => {
   const formData = new FormData()
   formData.append("file", file)
@@ -23,7 +35,8 @@ export const uploadPDF = async (file: File, numCards: number, specificTopic?: st
   }
 
   try {
-    const response = await fetch("http://localhost:8000/upload", {
+    // Upload for flashcards
+    const response = await fetch("http://localhost:8000/flashcards/upload", {
       method: "POST",
       body: formData,
     })
@@ -34,7 +47,31 @@ export const uploadPDF = async (file: File, numCards: number, specificTopic?: st
     }
 
     const data: UploadResponse = await response.json()
-    console.log("Upload response:", data) // Log the response for debugging
+    console.log("Flashcard upload response:", data)
+    
+    // Also upload the same file for chat
+    console.log("Uploading the same PDF for chat...")
+    const chatFormData = new FormData()
+    chatFormData.append("file", file)
+    
+    try {
+      const chatResponse = await fetch("http://localhost:8000/chat/upload-pdf/", {
+        method: "POST",
+        body: chatFormData,
+      })
+      
+      if (chatResponse.ok) {
+        const chatData = await chatResponse.json()
+        console.log("Chat upload response:", chatData)
+      } else {
+        console.error("Failed to upload PDF for chat:", await chatResponse.json())
+        // Continue even if chat upload fails
+      }
+    } catch (chatError) {
+      console.error("Error uploading PDF for chat:", chatError)
+      // Continue even if chat upload fails
+    }
+    
     return data
   } catch (error) {
     console.error("Error uploading PDF:", error)
@@ -44,7 +81,7 @@ export const uploadPDF = async (file: File, numCards: number, specificTopic?: st
 
 export const getNextFlashcard = async (sessionId: string): Promise<NextFlashcardResponse> => {
   try {
-    const response = await fetch("http://localhost:8000/next-flashcard", {
+    const response = await fetch("http://localhost:8000/flashcards/next", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -108,5 +145,67 @@ export const getAllFlashcards = async (sessionId: string): Promise<Flashcard[]> 
 
   console.log(`Finished fetching flashcards. Total: ${flashcards.length}`)
   return flashcards
+}
+
+// Chat API functions
+export const uploadPDFForChat = async (file: File): Promise<{ message: string }> => {
+  const formData = new FormData()
+  formData.append("file", file)
+
+  try {
+    const response = await fetch("http://localhost:8000/chat/upload-pdf/", {
+      method: "POST",
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.detail || "Failed to upload PDF for chat")
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error("Error uploading PDF for chat:", error)
+    throw error
+  }
+}
+
+export const askQuestion = async (question: string, previousConversations: string[] = [], chatHistory: string[] = []): Promise<ChatResponse> => {
+  try {
+    const response = await fetch("http://localhost:8000/chat/ask/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        question,
+        previous_conversations: previousConversations,
+        chat_history: chatHistory,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.detail || "Failed to get answer")
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error("Error asking question:", error)
+    throw error
+  }
+}
+
+export const checkAPIHealth = async (): Promise<{ status: string, services: string[] }> => {
+  try {
+    const response = await fetch("http://localhost:8000/health/")
+    if (!response.ok) {
+      throw new Error("API health check failed")
+    }
+    return await response.json()
+  } catch (error) {
+    console.error("Error checking API health:", error)
+    throw error
+  }
 }
 

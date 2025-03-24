@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "../components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Send, Loader2 } from "lucide-react"
-import { ChatMessage } from "./chat-message"
+import { askQuestion } from "../lib/api"
 
 interface ChatMessage {
   role: "user" | "assistant"
@@ -20,6 +20,8 @@ export function Chatbot({ sessionId }: ChatbotProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [previousConversations, setPreviousConversations] = useState<string[]>([])
+  const [chatHistory, setChatHistory] = useState<string[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -28,43 +30,59 @@ export function Chatbot({ sessionId }: ChatbotProps) {
 
   useEffect(() => {
     scrollToBottom()
-  }, [messages, messagesEndRef]) // Added messagesEndRef to dependencies
+  }, [messages])
 
+  // Update the handleSendMessage function with better error handling
   const handleSendMessage = async () => {
-    if (!input.trim() || isLoading) return
+    if (!input.trim() || isLoading) return;
 
-    const userMessage: ChatMessage = { role: "user", content: input }
-    setMessages((prev) => [...prev, userMessage])
-    setInput("")
-    setIsLoading(true)
+    const userMessage: ChatMessage = { role: "user", content: input };
+    setMessages((prev) => [...prev, userMessage]);
+    setInput("");
+    setIsLoading(true);
 
     try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: input, sessionId }),
-      })
+      // Update chat history for context
+      const updatedChatHistory = [...chatHistory, `User: ${input}`];
+      setChatHistory(updatedChatHistory);
 
-      if (!response.ok) {
-        throw new Error("Failed to get response from chatbot")
-      }
-
-      const data = await response.json()
+      // Call the direct API endpoint for chat
+      const response = await askQuestion(input, previousConversations, updatedChatHistory);
+      
       const assistantMessage: ChatMessage = {
         role: "assistant",
-        content: data.message,
-      }
-      setMessages((prev) => [...prev, assistantMessage])
+        content: response.answer,
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
+      
+      // Update previous conversations with this Q&A pair
+      setPreviousConversations((prev) => [...prev, `Q: ${input}\nA: ${response.answer}`]);
+      setChatHistory((prev) => [...prev, `Assistant: ${response.answer}`]);
+      
     } catch (error) {
-      console.error("Error in chat:", error)
+      console.error("Error in chat:", error);
+      
+      // Check for specific error messages from the API
+      let errorMessage = "I'm sorry, but I encountered an error. Please try again later.";
+      
+      if (error instanceof Error) {
+        const errorText = error.message || '';
+        
+        if (errorText.includes("No documents have been processed")) {
+          errorMessage = "No documents have been processed. Please upload a PDF first.";
+        } else if (errorText.includes("Failed to connect")) {
+          errorMessage = "Could not connect to the AI service. Please check your connection.";
+        }
+      }
+      
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "I'm sorry, but I encountered an error. Please try again later." },
-      ])
+        { role: "assistant", content: errorMessage },
+      ]);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
     <Card className="mt-6">
@@ -73,8 +91,26 @@ export function Chatbot({ sessionId }: ChatbotProps) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="h-[300px] overflow-y-auto pr-4 space-y-4">
+          {messages.length === 0 && (
+            <div className="text-center text-muted-foreground">
+              Ask questions about the content in your PDF...
+            </div>
+          )}
           {messages.map((message, index) => (
-            <ChatMessage key={index} role={message.role} content={message.content} />
+            <div 
+              key={index} 
+              className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+            >
+              <div 
+                className={`max-w-[80%] p-3 rounded-lg ${
+                  message.role === "user" 
+                    ? "bg-primary text-primary-foreground" 
+                    : "bg-muted"
+                }`}
+              >
+                {message.content}
+              </div>
+            </div>
           ))}
           {isLoading && (
             <div className="flex items-center justify-center">
