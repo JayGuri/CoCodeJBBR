@@ -9,42 +9,92 @@ import { PerformanceAnalysis } from "../../components/performance-analysis"
 import { useTheme } from "next-themes"
 import { CheckCircle, XCircle, Clock } from "lucide-react"
 
-// Sample questions about photosynthesis
+// Data Science questions
 const questions = [
   {
     id: 1,
-    question: "What is the primary function of photosynthesis?",
-    options: [
-      "Converting light energy to chemical energy",
-      "Breaking down glucose",
-      "Cellular respiration",
-      "Nitrogen fixation",
-    ],
-    correct: 0,
+    question: "Which of the following is NOT a common Python library used for data analysis?",
+    options: ["Pandas", "NumPy", "Matplotlib", "JavaFX"],
+    correct: 3,
   },
   {
     id: 2,
-    question: "Which organelle is responsible for photosynthesis in plants?",
-    options: ["Mitochondria", "Chloroplast", "Nucleus", "Golgi apparatus"],
+    question: "What does the 'fit' method do in scikit-learn?",
+    options: [
+      "Evaluates model performance",
+      "Trains the model on the data",
+      "Makes predictions on new data",
+      "Optimizes hyperparameters",
+    ],
     correct: 1,
   },
   {
     id: 3,
-    question: "What is the main product of photosynthesis?",
-    options: ["Oxygen", "Carbon dioxide", "Glucose", "Water"],
-    correct: 2,
-  },
-  {
-    id: 4,
-    question: "Which of the following is NOT required for photosynthesis?",
-    options: ["Light", "Water", "Carbon dioxide", "Nitrogen"],
+    question: "Which technique is used to prevent overfitting in machine learning models?",
+    options: ["Data augmentation", "Regularization", "Feature engineering", "All of the above"],
     correct: 3,
   },
   {
+    id: 4,
+    question: "What is the purpose of the 'train_test_split' function in scikit-learn?",
+    options: [
+      "To split data into training and testing sets",
+      "To create cross-validation folds",
+      "To balance imbalanced datasets",
+      "To normalize feature values",
+    ],
+    correct: 0,
+  },
+  {
     id: 5,
-    question: "In which part of the plant does photosynthesis primarily occur?",
-    options: ["Roots", "Stems", "Leaves", "Flowers"],
+    question: "Which of the following is a supervised learning algorithm?",
+    options: ["K-means clustering", "Principal Component Analysis (PCA)", "Random Forest", "DBSCAN"],
     correct: 2,
+  },
+  {
+    id: 6,
+    question: "What does RMSE stand for in the context of model evaluation?",
+    options: [
+      "Random Mean Squared Error",
+      "Root Mean Squared Error",
+      "Relative Mean Squared Estimation",
+      "Recursive Model State Evaluation",
+    ],
+    correct: 1,
+  },
+  {
+    id: 7,
+    question: "Which visualization would be most appropriate for showing the distribution of a continuous variable?",
+    options: ["Pie chart", "Histogram", "Bar chart", "Scatter plot"],
+    correct: 1,
+  },
+  {
+    id: 8,
+    question: "What is the main purpose of feature scaling in machine learning?",
+    options: [
+      "To reduce the number of features",
+      "To make features have similar ranges",
+      "To increase model complexity",
+      "To eliminate categorical variables",
+    ],
+    correct: 1,
+  },
+  {
+    id: 9,
+    question: "Which SQL clause is used to filter groups in a GROUP BY query?",
+    options: ["WHERE", "HAVING", "FILTER", "GROUP FILTER"],
+    correct: 1,
+  },
+  {
+    id: 10,
+    question: "What is the purpose of cross-validation in machine learning?",
+    options: [
+      "To clean the dataset",
+      "To evaluate model performance more reliably",
+      "To visualize model predictions",
+      "To speed up model training",
+    ],
+    correct: 1,
   },
 ]
 
@@ -60,7 +110,7 @@ export default function QuizPage() {
 
   useEffect(() => {
     setStartTime(Date.now())
-  }, [])
+  }, [currentQuestion])
 
   const handleAnswer = (answerIndex: number) => {
     setSelectedAnswer(answerIndex)
@@ -156,13 +206,13 @@ export default function QuizPage() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center">
                         {answers[index] === q.correct ? (
-                          <CheckCircle className="mr-2 h-5 w-5 text-green-500" />
+                          <CheckCircle className="mr-2 h-5 w-5 text-green-500 flex-shrink-0" />
                         ) : (
-                          <XCircle className="mr-2 h-5 w-5 text-red-500" />
+                          <XCircle className="mr-2 h-5 w-5 text-red-500 flex-shrink-0" />
                         )}
                         <p className="font-medium">{q.question}</p>
                       </div>
-                      <div className="flex items-center">
+                      <div className="flex items-center ml-2 flex-shrink-0">
                         <Clock className="mr-1 h-4 w-4 text-blue-500" />
                         <span className="text-sm text-muted-foreground">{timePerQuestion[index].toFixed(1)}s</span>
                       </div>
@@ -189,7 +239,7 @@ export default function QuizPage() {
     <div className="container max-w-4xl py-12">
       <Card>
         <CardHeader>
-          <CardTitle>Photosynthesis Quiz</CardTitle>
+          <CardTitle>Data Science Quiz</CardTitle>
           <Progress value={((currentQuestion + 1) / questions.length) * 100} />
         </CardHeader>
         <CardContent className="space-y-6">

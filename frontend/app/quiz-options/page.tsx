@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -9,6 +11,7 @@ import { Label } from "../../components/ui/label"
 import { RadioGroup, RadioGroupItem } from "../../components/ui/radio-group"
 import { LoadingSpinner } from "../../components/loading-spinner"
 import { generateContent } from "../../services/api"
+import { FileSpreadsheet, BrainCircuit } from "lucide-react"
 
 export default function QuizOptionsPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -60,11 +63,16 @@ export default function QuizOptionsPage() {
         {/* Demo Content Card */}
         <Card className="w-full">
           <CardHeader>
-            <CardTitle>Try a Demo</CardTitle>
-            <CardDescription>Experience our format with a sample on Photosynthesis</CardDescription>
+            <CardTitle className="flex items-center">
+              <BrainCircuit className="mr-2 h-5 w-5" />
+              Try a Demo
+            </CardTitle>
+            <CardDescription>Experience our format with a sample on Data Science</CardDescription>
           </CardHeader>
           <CardContent>
-            <p>This contains information about the process of photosynthesis in plants.</p>
+            <p>
+              This contains questions about Python libraries, machine learning algorithms, data visualization, and more.
+            </p>
           </CardContent>
           <CardFooter className="flex gap-4">
             <Button onClick={() => handleDemoClick("quiz")}>Start Demo Quiz</Button>
@@ -77,7 +85,10 @@ export default function QuizOptionsPage() {
         {/* Custom Content Card */}
         <Card className="w-full">
           <CardHeader>
-            <CardTitle>Upload Your Own Content</CardTitle>
+            <CardTitle className="flex items-center">
+              <FileSpreadsheet className="mr-2 h-5 w-5" />
+              Upload Your Own Content
+            </CardTitle>
             <CardDescription>Generate a quiz or flashcards from your PDF</CardDescription>
           </CardHeader>
           <CardContent>
@@ -120,7 +131,7 @@ export default function QuizOptionsPage() {
                     type="text"
                     value={topic}
                     onChange={(e) => setTopic(e.target.value)}
-                    placeholder="Enter a specific topic"
+                    placeholder="E.g., Machine Learning, Data Visualization"
                     className="mt-2"
                   />
                 </div>
